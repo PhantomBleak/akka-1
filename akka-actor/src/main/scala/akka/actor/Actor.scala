@@ -454,7 +454,7 @@ trait Actor {
 
   // to make type Receive known in subclasses without import
   type Receive = Actor.Receive
- // val automata = new Automata;
+  // val automata = new Automata;
   //automata.init();
 
   /**

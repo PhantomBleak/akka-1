@@ -341,6 +341,9 @@ private[akka] trait Cell {
    */
   def sendMessage(msg: Envelope): Unit
 
+  //TODO maybe we should add it here
+  //consider adding your shit here
+
   /**
    * Enqueue a message to be sent to the actor; may or may not actually
    * schedule the actor to run, depending on which type of cell it is.

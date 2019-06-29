@@ -32,9 +32,10 @@ private[akka] class RepointableActorRef(
   val mailboxType: MailboxType,
   val supervisor:  InternalActorRef,
   val path:        ActorPath)
-  extends ActorRefWithCell with RepointableRef {
+  extends ActorRefWithCell with RepointableRef
+{
 
-  import AbstractActorRef.{ cellOffset, lookupOffset }
+  import AbstractActorRef.{cellOffset, lookupOffset}
 
   /*
    * H E R E   B E   D R A G O N S !
@@ -50,29 +51,33 @@ private[akka] class RepointableActorRef(
   @volatile private var _lookupDoNotCallMeDirectly: Cell = _
 
   def underlying: Cell = Unsafe.instance.getObjectVolatile(this, cellOffset).asInstanceOf[Cell]
+
   def lookup = Unsafe.instance.getObjectVolatile(this, lookupOffset).asInstanceOf[Cell]
 
-  @tailrec final def swapCell(next: Cell): Cell = {
+  @tailrec final def swapCell(next: Cell): Cell =
+  {
     val old = underlying
     if (Unsafe.instance.compareAndSwapObject(this, cellOffset, old, next)) old else swapCell(next)
   }
 
-  @tailrec final def swapLookup(next: Cell): Cell = {
+  @tailrec final def swapLookup(next: Cell): Cell =
+  {
     val old = lookup
     if (Unsafe.instance.compareAndSwapObject(this, lookupOffset, old, next)) old else swapLookup(next)
   }
 
   /**
-   * Initialize: make a dummy cell which holds just a mailbox, then tell our
-   * supervisor that we exist so that he can create the real Cell in
-   * handleSupervise().
-   *
-   * Call twice on your own peril!
-   *
-   * This is protected so that others can have different initialization.
-   */
+    * Initialize: make a dummy cell which holds just a mailbox, then tell our
+    * supervisor that we exist so that he can create the real Cell in
+    * handleSupervise().
+    *
+    * Call twice on your own peril!
+    *
+    * This is protected so that others can have different initialization.
+    */
   def initialize(async: Boolean): this.type =
-    underlying match {
+    underlying match
+    {
       case null ⇒
         swapCell(new UnstartedCell(system, this, props, supervisor))
         swapLookup(underlying)
@@ -83,17 +88,19 @@ private[akka] class RepointableActorRef(
     }
 
   /**
-   * This method is supposed to be called by the supervisor in handleSupervise()
-   * to replace the UnstartedCell with the real one. It assumes no concurrent
-   * modification of the `underlying` field, though it is safe to send messages
-   * at any time.
-   */
+    * This method is supposed to be called by the supervisor in handleSupervise()
+    * to replace the UnstartedCell with the real one. It assumes no concurrent
+    * modification of the `underlying` field, though it is safe to send messages
+    * at any time.
+    */
   def point(catchFailures: Boolean): this.type =
-    underlying match {
+    underlying match
+    {
       case u: UnstartedCell ⇒
         val cell =
           try newCell(u)
-          catch {
+          catch
+          {
             case NonFatal(ex) if catchFailures ⇒
               val safeDispatcher = system.dispatchers.defaultGlobalDispatcher
               new ActorCell(system, this, props, safeDispatcher, supervisor).initWithFailure(ex)
@@ -110,13 +117,13 @@ private[akka] class RepointableActorRef(
         u.replaceWith(cell)
         this
       case null ⇒ throw new IllegalStateException("underlying cell is null")
-      case _    ⇒ this // this happens routinely for things which were created async=false
+      case _ ⇒ this // this happens routinely for things which were created async=false
     }
 
   /**
-   * This is called by activate() to obtain the cell which is to replace the
-   * unstarted cell. The cell must be fully functional.
-   */
+    * This is called by activate() to obtain the cell which is to replace the
+    * unstarted cell. The cell must be fully functional.
+    */
   def newCell(@unused old: UnstartedCell): Cell =
     new ActorCell(system, this, props, dispatcher, supervisor).init(sendSupervise = false, mailboxType)
 
@@ -130,10 +137,11 @@ private[akka] class RepointableActorRef(
 
   def restart(cause: Throwable): Unit = underlying.restart(cause)
 
-  def isStarted: Boolean = underlying match {
+  def isStarted: Boolean = underlying match
+  {
     case _: UnstartedCell ⇒ false
-    case null             ⇒ throw new IllegalStateException("isStarted called before initialized")
-    case _                ⇒ true
+    case null ⇒ throw new IllegalStateException("isStarted called before initialized")
+    case _ ⇒ true
   }
 
   @deprecated("Use context.watch(actor) and receive Terminated(actor)", "2.2") def isTerminated: Boolean = underlying.isTerminated
@@ -145,27 +153,31 @@ private[akka] class RepointableActorRef(
   def getParent: InternalActorRef = underlying.parent
 
   def getChild(name: Iterator[String]): InternalActorRef =
-    if (name.hasNext) {
-      name.next match {
+    if (name.hasNext)
+    {
+      name.next match
+      {
         case ".." ⇒ getParent.getChild(name)
-        case ""   ⇒ getChild(name)
+        case "" ⇒ getChild(name)
         case other ⇒
           val (childName, uid) = ActorCell.splitNameAndUid(other)
-          lookup.getChildByName(childName) match {
+          lookup.getChildByName(childName) match
+          {
             case Some(crs: ChildRestartStats) if uid == ActorCell.undefinedUid || uid == crs.uid ⇒
               crs.child.asInstanceOf[InternalActorRef].getChild(name)
-            case _ ⇒ lookup match {
+            case _ ⇒ lookup match
+            {
               case ac: ActorCell ⇒ ac.getFunctionRefOrNobody(childName, uid)
-              case _             ⇒ Nobody
+              case _ ⇒ Nobody
             }
           }
       }
     } else this
 
   /**
-   * Method for looking up a single child beneath this actor.
-   * It is racy if called from the outside.
-   */
+    * Method for looking up a single child beneath this actor.
+    * It is racy if called from the outside.
+    */
   def getSingleChild(name: String): InternalActorRef = lookup.getSingleChild(name)
 
   def children: immutable.Iterable[ActorRef] = lookup.childrenRefs.children

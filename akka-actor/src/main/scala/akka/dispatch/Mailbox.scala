@@ -9,7 +9,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.ReentrantLock
 import java.util.{Comparator, Deque, PriorityQueue, Queue}
 
-import akka.actor.{ActorCell, ActorRef, ActorSystem, DeadLetter, InternalActorRef, MessageBundle, Transition}
+import akka.actor.{ActorCell, ActorRef, ActorSystem, Automata, DeadLetter, InternalActorRef, MessageBundle, Transition}
 import akka.dispatch.sysmsg._
 import akka.event.Logging.Error
 import akka.util.Helpers.ConfigOps
@@ -854,6 +854,7 @@ object MyControlAwareMailbox {
     //I DONT KNOW
     def tellStatusToSender(from: Int, to: Int, messageBundle: MessageBundle, regTransiton: Boolean): Unit =
     {
+
       var answer = true
       var transition: Transition = new Transition(from, to, messageBundle, regTransiton)
       if(history.contains(transition))
@@ -912,7 +913,7 @@ class MyControlAwareMailbox extends MailboxType with ProducesMessageQueue[MyCont
 trait MyControlMessage
 
 case class AskControlMessage(message: Any) extends MyControlMessage
-case class TellPresToSenderControlMessage(message: Any) extends MyControlMessage
+case class TellPresToSenderControlMessage(message: Any, flag: Boolean) extends MyControlMessage
 case class TellControlMessage(message: Any) extends MyControlMessage
 
 /**

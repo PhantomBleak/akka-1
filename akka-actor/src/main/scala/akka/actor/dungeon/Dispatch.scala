@@ -11,9 +11,9 @@ import akka.dispatch.sysmsg._
 import akka.event.Logging.Error
 import akka.util.Unsafe
 import akka.actor._
-import akka.serialization.{DisabledJavaSerializer, SerializationExtension, Serializers}
+import akka.serialization.{ DisabledJavaSerializer, SerializationExtension, Serializers }
 
-import scala.util.control.{NoStackTrace, NonFatal}
+import scala.util.control.{ NoStackTrace, NonFatal }
 import scala.util.control.Exception.Catcher
 import akka.serialization.Serialization
 
@@ -118,14 +118,13 @@ private[akka] trait Dispatch { this: ActorCell ⇒
   }
 
   def waitForPresToAnswer(pres: Vector[Transition]): Boolean =
-  {
-    for (pre <- pres)
     {
-      if(pre.messageBundle.message == true)
-        return true
+      for (pre ← pres) {
+        if (pre.messageBundle.message == true)
+          return true
+      }
+      return false
     }
-    return false
-  }
 
   // ➡➡➡ NEVER SEND THE SAME SYSTEM MESSAGE OBJECT TO TWO ACTORS ⬅⬅⬅
   final def suspend(): Unit = try dispatcher.systemDispatch(this, Suspend()) catch handleException
@@ -140,13 +139,13 @@ private[akka] trait Dispatch { this: ActorCell ⇒
   final def stop(): Unit = try dispatcher.systemDispatch(this, Terminate()) catch handleException
 
   def sendMessage(msg: Envelope): Unit =
-  try {
-    val msgToDispatch =
-      if (system.settings.SerializeAllMessages) serializeAndDeserialize(msg)
-      else msg
+    try {
+      val msgToDispatch =
+        if (system.settings.SerializeAllMessages) serializeAndDeserialize(msg)
+        else msg
 
-    dispatcher.dispatch(this, msgToDispatch)
-  } catch handleException
+      dispatcher.dispatch(this, msgToDispatch)
+    } catch handleException
 
   private def serializeAndDeserialize(envelope: Envelope): Envelope = {
 

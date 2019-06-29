@@ -4,21 +4,28 @@
 
 package akka.actor
 
-import java.util.concurrent.ConcurrentHashMap
+import java.io.ObjectStreamException
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.locks.ReentrantLock
+
+import akka.actor.TypedActor.MethodCall
 
 import scala.annotation.tailrec
 import scala.collection.immutable
 import scala.util.control.NonFatal
-
 import akka.dispatch._
 import akka.dispatch.sysmsg._
 import akka.event.AddressTerminatedTopic
 import akka.event.EventStream
 import akka.event.Logging
+import akka.event.Logging.Warning
 import akka.event.MarkerLoggingAdapter
-import akka.serialization.JavaSerializer
-import akka.serialization.Serialization
-import akka.util.OptionVal
+import akka.pattern.{AskableActorRef, PromiseActorRef}
+import akka.serialization.{JavaSerializer, Serialization, SerializationExtension}
+import akka.util.{JavaDurationConverters, OptionVal, Timeout}
+
+import scala.concurrent.Future
+import scala.concurrent.duration.{Duration, FiniteDuration}
 
 object ActorRef {
 
@@ -102,6 +109,8 @@ object ActorRef {
  */
 abstract class ActorRef extends java.lang.Comparable[ActorRef] with Serializable {
   scalaRef: InternalActorRef ⇒
+  def ?(message: AskControlMessage) = ???
+
 
   /**
    * Returns the path for this actor (from this actor up to the root actor).
@@ -125,6 +134,12 @@ abstract class ActorRef extends java.lang.Comparable[ActorRef] with Serializable
    */
   final def tell(msg: Any, sender: ActorRef): Unit = this.!(msg)(sender)
 
+  final def !!(message: Any)(implicit sender: ActorRef = Actor.noSender): Unit =
+    {
+      //TODO do some shit here
+
+      this.!(message)(sender)
+    }
   /**
    * Forwards the message and passes the original sender actor as the sender.
    *
@@ -228,7 +243,7 @@ private[akka] abstract class InternalActorRef extends ActorRef with ScalaActorRe
   def restart(cause: Throwable): Unit
   def stop(): Unit
   def sendSystemMessage(message: SystemMessage): Unit
-
+  def !!(message: Any, sender: ActorRef): Unit
   /**
    * Get a reference to the actor ref provider which created this ref.
    */
@@ -308,7 +323,7 @@ private[akka] class LocalActorRef private[akka] (
   _supervisor:       InternalActorRef,
   override val path: ActorPath)
   extends ActorRefWithCell with LocalRef {
-
+  //TODO !!
   /*
    * Safe publication of this class’s fields is guaranteed by mailbox.setActor()
    * which is called indirectly from actorCell.init() (if you’re wondering why
@@ -347,7 +362,7 @@ private[akka] class LocalActorRef private[akka] (
    * be processed until resumed.
    */
   override def suspend(): Unit = actorCell.suspend()
-
+  def ask(actor: Any, msg: Any) = ???
   /**
    * Resumes a suspended actor.
    */
@@ -400,26 +415,87 @@ private[akka] class LocalActorRef private[akka] (
 
   override def sendSystemMessage(message: SystemMessage): Unit = actorCell.sendSystemMessage(message)
 
-  def preDispatch(message: Any, sender: ActorRef): Unit = //TODO ehtemaalan bayad ye int pas bede, ke bedoonim send anjam beshe ya cancele ghaziash
-  {
-    //find pres of sender
-    //send pres for sender, send ask to pres
-    //mitoonim az khode B estefade konim kollan?
-    //agi na mishe bazam, revale!
-
-  }
 
   override def !(message: Any)(implicit sender: ActorRef = Actor.noSender): Unit =
-  {
-    message match
-    {
-      case _: MyControlMessage => actorCell.sendMessage(message, sender)
-      case _ => preDispatch(message, sender)
-    }
-  }
+    actorCell.sendMessage(message, sender)
+
 
   override def restart(cause: Throwable): Unit = actorCell.restart(cause)
 
+
+
+
+  def sendAskMessagesAndGetFlag(msgB:MessageBundle): Boolean =
+  {
+    def this(length: Long, unit: TimeUnit) = this(Duration(length, unit))
+    val zero: Timeout = new Timeout(Duration.Zero)
+    def apply(length: Long, unit: TimeUnit): Timeout = new Timeout(length, unit)
+
+    def create(duration: java.time.Duration): Timeout = {
+      import JavaDurationConverters._
+      new Timeout(duration.asScala)
+    }
+    val automata: Automata = new Automata
+    val msgBundle: MessageBundle = new MessageBundle(msgB.sender, msgB.message,msgB.receiver)
+    val transitions = automata.findTransitionByMessageBundle(msgBundle)
+    val pres:Vector[Transition]= automata.findPre(transitions)
+    implicit val scheduler = system.scheduler
+    @volatile var failCount = 0
+    def attempt() = {
+      if (failCount < 5) {
+        failCount += 1
+        Future.failed(new IllegalStateException(failCount.toString))
+      } else Future.successful(5)
+    }
+    //Return a new future that will retry up to 10 times
+    val retried = akka.pattern.retry(() => attempt(), 10, 100)
+    var future :Vector[Future[TellControlMessage]] = Vector.empty[Future[TellControlMessage]]
+    var i: Integer = 0
+    for(pre <- pres)
+    {
+      val askMsg = AskControlMessage(msgBundle)
+      future = future :+ ask(pre, askMsg)
+      i = i +1
+    }
+    if(future.size == i)
+      return true
+    return false
+
+
+
+  }
+
+   def !!(receiver: ActorRef, message: Any, sender: ActorCell): Unit =
+  {
+    //TODO preDispatch shit
+    //search for pres in automata
+    //send ask messages to pres
+    //w8 for response
+    //decide what to do (send message or abort)
+
+    message match {
+      case w: Watch   ⇒ addWatcher(w.watchee, w.watcher)
+      case u: Unwatch ⇒ remWatcher(u.watchee, u.watcher)
+      case DeathWatchNotification(actorRef, _, _) ⇒
+        this.!(Terminated(actorRef)(existenceConfirmed = true, addressTerminated = false))(actorRef)
+      case _ ⇒ //ignore all other messages
+    }
+
+
+
+    val automata: Automata = new Automata
+    val msgBundle: MessageBundle = new MessageBundle(receiver, message, sender)
+    val transitions = automata.findTransitionByMessageBundle(msgBundle)
+    automata.findPre(transitions)
+    val msgB: MessageBundle = new MessageBundle(msgB.sender, msgB.message,msgB.receiver) //TODO change to message
+    val answer:Boolean = sendAskMessagesAndGetFlag(msgB)
+
+    if (answer)
+      this.!(message, sender)
+    //TODO check again
+    //make sure about historym
+
+  }
   @throws(classOf[java.io.ObjectStreamException])
   protected def writeReplace(): AnyRef = SerializedActorRef(this)
 }
@@ -949,4 +1025,16 @@ private[akka] final class FunctionRef(
   private def unsubscribeAddressTerminated(): Unit = AddressTerminatedTopic(system).unsubscribe(this)
 
   private def subscribeAddressTerminated(): Unit = AddressTerminatedTopic(system).subscribe(this)
+}
+
+object timeout
+{
+
+  object duration
+  {
+
+    object length
+
+  }
+
 }
