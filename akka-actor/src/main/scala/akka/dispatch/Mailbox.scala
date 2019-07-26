@@ -837,6 +837,10 @@ trait BoundedControlAwareMessageQueueSemantics extends BoundedMessageQueueSemant
 trait ControlMessage
 
 
+//MyNote
+//all changes here are named My[someName] so it should be easy to find them
+//this file has been tested, so avoid changing it heavily unless you know what you are doing.
+
 trait MyControlAwareMessageQueueSemantics
 
 
@@ -844,14 +848,13 @@ object MyControlAwareMailbox {
   class MyControlAwareMessageQueue extends MessageQueue with MyControlAwareMessageQueueSemantics {
     private final val controlQueue: Queue[Envelope] = new ConcurrentLinkedQueue[Envelope]()
     private final val queue: Queue[Envelope] = new ConcurrentLinkedQueue[Envelope]()
+    //myNote
+    //history defined here, i guess this is right, but maybe you need to change it.
     val history: Vector[Transition] = new Vector[Transition]
-    //TODO baraye enqueue kardan bayad havaset bashe ke inja enqueue ba baghie fargh dare
-    //bayad ye joori benvisi ke agi ControlMessage bood bere too yekishoon, dar gheyre insoorat bere oonyeki
-    //az ControlAwareMessageQueueSemantics ude begir: Mailbox.scala line 812
-    //avval bayad ControlMessage ro piade sazi koni, ke bayad dobare az hamoon ide begiri
-    //nokteye dg ke bayad havaset bashe ine ke shayad bayad forme khodesh bezanim ke too trait piade sazi karde
-    //shayad hamin form doroste
-    //I DONT KNOW
+
+    //MyNote
+    //you should implement the algorithm here.
+    //give green light to sender if the message should be sent.
     def tellStatusToSender(from: Int, to: Int, messageBundle: MessageBundle, regTransiton: Boolean): Unit =
     {
 
@@ -922,8 +925,6 @@ case class TellControlMessage(message: Any) extends MyControlMessage
  */
 final case class UnboundedControlAwareMailbox() extends MailboxType with ProducesMessageQueue[UnboundedControlAwareMailbox.MessageQueue] {
 
-  // this constructor will be called via reflection when this mailbox type
-  // is used in the application config
   def this(settings: ActorSystem.Settings, config: Config) = this()
 
   def create(owner: Option[ActorRef], system: Option[ActorSystem]): MessageQueue = new UnboundedControlAwareMailbox.MessageQueue
@@ -957,7 +958,6 @@ object BoundedControlAwareMailbox {
     private final val putLock = new ReentrantLock()
     private final val notFull = putLock.newCondition()
 
-    // no need to use blocking queues here, as blocking is being handled in `enqueueWithTimeout`
     val controlQueue = new ConcurrentLinkedQueue[Envelope]()
     val queue = new ConcurrentLinkedQueue[Envelope]()
 

@@ -109,7 +109,11 @@ object ActorRef {
  */
 abstract class ActorRef extends java.lang.Comparable[ActorRef] with Serializable {
   scalaRef: InternalActorRef ⇒
-  def ?(message: AskControlMessage) = ???
+
+  //MyNote
+  //after all, im still not sure about the place we should add this.
+  //there is some cases in which we don't send a message from inside an actor.
+  //def ?(message: AskControlMessage) = ???
 
 
   /**
@@ -136,7 +140,10 @@ abstract class ActorRef extends java.lang.Comparable[ActorRef] with Serializable
 
   final def !!(message: Any)(implicit sender: ActorRef = Actor.noSender): Unit =
     {
-      //TODO do some shit here
+      //MyNote
+      //we should implement futures with probably a while structure here.
+      //I guess 5 seconds would do the job for timeout duration.
+      //the question is, WHERE TO PUT IT?
 
       this.!(message)(sender)
     }
@@ -243,6 +250,9 @@ private[akka] abstract class InternalActorRef extends ActorRef with ScalaActorRe
   def restart(cause: Throwable): Unit
   def stop(): Unit
   def sendSystemMessage(message: SystemMessage): Unit
+
+  //MyNote
+  //added by me
   def !!(message: Any, sender: ActorRef): Unit
   /**
    * Get a reference to the actor ref provider which created this ref.
@@ -323,7 +333,11 @@ private[akka] class LocalActorRef private[akka] (
   _supervisor:       InternalActorRef,
   override val path: ActorPath)
   extends ActorRefWithCell with LocalRef {
-  //TODO !!
+  //MyNote
+  //i guess we should add !! here too, am I sure? Hell no.
+
+
+
   /*
    * Safe publication of this class’s fields is guaranteed by mailbox.setActor()
    * which is called indirectly from actorCell.init() (if you’re wondering why
@@ -425,21 +439,16 @@ private[akka] class LocalActorRef private[akka] (
 
 
 
+  //MyNote
+  //this function tries to send the AskMessages and w8 for the response via Futures.
+  //this is not correct, and should be commented, but it is here to give you some ideas.
+  //I recommend a fully rewritten function.
   def sendAskMessagesAndGetFlag(msgB:MessageBundle): Boolean =
   {
-    def this(length: Long, unit: TimeUnit) = this(Duration(length, unit))
-    val zero: Timeout = new Timeout(Duration.Zero)
-    def apply(length: Long, unit: TimeUnit): Timeout = new Timeout(length, unit)
-
-    def create(duration: java.time.Duration): Timeout = {
-      import JavaDurationConverters._
-      new Timeout(duration.asScala)
-    }
     val automata: Automata = new Automata
     val msgBundle: MessageBundle = new MessageBundle(msgB.sender, msgB.message,msgB.receiver)
     val transitions = automata.findTransitionByMessageBundle(msgBundle)
     val pres:Vector[Transition]= automata.findPre(transitions)
-    implicit val scheduler = system.scheduler
     @volatile var failCount = 0
     def attempt() = {
       if (failCount < 5) {
@@ -467,20 +476,12 @@ private[akka] class LocalActorRef private[akka] (
 
    def !!(receiver: ActorRef, message: Any, sender: ActorCell): Unit =
   {
-    //TODO preDispatch shit
+    //MyNote
+    //TODO preDispatch
     //search for pres in automata
     //send ask messages to pres
     //w8 for response
     //decide what to do (send message or abort)
-
-    message match {
-      case w: Watch   ⇒ addWatcher(w.watchee, w.watcher)
-      case u: Unwatch ⇒ remWatcher(u.watchee, u.watcher)
-      case DeathWatchNotification(actorRef, _, _) ⇒
-        this.!(Terminated(actorRef)(existenceConfirmed = true, addressTerminated = false))(actorRef)
-      case _ ⇒ //ignore all other messages
-    }
-
 
 
     val automata: Automata = new Automata
@@ -492,8 +493,9 @@ private[akka] class LocalActorRef private[akka] (
 
     if (answer)
       this.!(message, sender)
+    //MyNote
     //TODO check again
-    //make sure about historym
+    //double check "history" implementation
 
   }
   @throws(classOf[java.io.ObjectStreamException])
@@ -1025,16 +1027,4 @@ private[akka] final class FunctionRef(
   private def unsubscribeAddressTerminated(): Unit = AddressTerminatedTopic(system).unsubscribe(this)
 
   private def subscribeAddressTerminated(): Unit = AddressTerminatedTopic(system).subscribe(this)
-}
-
-object timeout
-{
-
-  object duration
-  {
-
-    object length
-
-  }
-
 }
