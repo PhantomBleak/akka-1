@@ -342,7 +342,8 @@ private[akka] trait Cell {
   def sendMessage(msg: Envelope): Unit
 
   //TODO maybe we should add it here
-  //consider adding your shit here
+  //myNote
+  //consider adding your !! function here in case of failure.
 
   /**
    * Enqueue a message to be sent to the actor; may or may not actually
