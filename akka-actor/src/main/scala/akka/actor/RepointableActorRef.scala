@@ -254,7 +254,6 @@ private[akka] class UnstartedCell(
   override def getSingleChild(name: String): InternalActorRef = Nobody
 
   def sendMessage(msg: Envelope): Unit = {
-  def sendMessage(msg: Envelope): Unit = {
     if (lock.tryLock(timeout.length, timeout.unit)) {
       try {
         val cell = self.underlying
